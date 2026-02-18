@@ -5,6 +5,7 @@ public class Main {
         testUser();
         testPermission();
         testRole();
+        testAssignmentMetadata();
     }
     
     private static void testUser() {
@@ -140,10 +141,10 @@ public class Main {
         System.out.println("Contains READ on users: " + 
             adminRole.hasPermission(readUsers));
         
-        // Создаем временный объект для сравнения (с валидным описанием)
+        // Создаем временный объект для сравнения
         Permission deleteReports = new Permission("DELETE", "reports", "Can delete reports");
         System.out.println("Contains DELETE on reports: " + 
-            adminRole.hasPermission(deleteReports)); // должно быть false
+            adminRole.hasPermission(deleteReports));
         
         // Удаляем разрешение
         adminRole.removePermission(readReports);
@@ -168,9 +169,9 @@ public class Main {
         System.out.println("=== Testing equals/hashCode ===");
         Role anotherAdmin = new Role("Administrator", "Full system access");
         System.out.println("Roles with same name but different IDs are equal? " + 
-            adminRole.equals(anotherAdmin)); // false, так как ID разные
+            adminRole.equals(anotherAdmin));
         
-        // Создаем роль с предопределенным ID (имитация загрузки из файла)
+        // Создаем роль с предопределенным ID
         Role loadedRole = Role.createFromExisting(
             adminRole.getId(), 
             "Manager", 
@@ -178,6 +179,38 @@ public class Main {
             adminRole.getPermissions()
         );
         System.out.println("Role created from existing with same ID are equal? " + 
-            adminRole.equals(loadedRole)); // true, так как ID одинаковый
+            adminRole.equals(loadedRole));
+    }
+    
+    private static void testAssignmentMetadata() {
+        System.out.println("\n=== Testing AssignmentMetadata ===");
+        
+        // Тест 1: Создание с указанием всех полей
+        AssignmentMetadata meta1 = new AssignmentMetadata("admin", "2026-02-18 20:30", "Initial setup");
+        System.out.println("✓ Created: " + meta1.format());
+        
+        // Тест 2: Создание с текущей датой
+        AssignmentMetadata meta2 = AssignmentMetadata.now("john_doe", "Project assignment");
+        System.out.println("✓ Created now: " + meta2.format());
+        
+        // Тест 3: Создание без причины (опционально)
+        AssignmentMetadata meta3 = AssignmentMetadata.now("jane_doe", null);
+        System.out.println("✓ Created without reason: " + meta3.format());
+        
+        // Тест 4: Валидация - пустой assignedBy
+        try {
+            AssignmentMetadata meta4 = new AssignmentMetadata("", "2026-02-18 20:30", "test");
+            System.out.println("✗ Should fail: " + meta4);
+        } catch (IllegalArgumentException e) {
+            System.out.println("✓ Correctly failed: " + e.getMessage());
+        }
+        
+        // Тест 5: Валидация - null assignedAt
+        try {
+            AssignmentMetadata meta5 = new AssignmentMetadata("admin", null, "test");
+            System.out.println("✗ Should fail: " + meta5);
+        } catch (IllegalArgumentException e) {
+            System.out.println("✓ Correctly failed: " + e.getMessage());
+        }
     }
 }
