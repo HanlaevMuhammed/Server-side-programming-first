@@ -4,6 +4,7 @@ public class Main {
     public static void main(String[] args) {
         testUser();
         testPermission();
+        testRole();
     }
     
     private static void testUser() {
@@ -64,7 +65,7 @@ public class Main {
         // Тест 2: Автоматическое преобразование регистра
         try {
             Permission p2 = new Permission("  write  ", "  REPORTS  ", "  Can modify reports  ");
-            System.out.println("✓ Success: " + p2.format());
+            System.out.println("✓ Success: " + p2.format() + " (normalized)");
         } catch (IllegalArgumentException e) {
             System.out.println("✗ Failed: " + e.getMessage());
         }
@@ -98,10 +99,85 @@ public class Main {
         Permission p = new Permission("READ", "users", "Can read users");
         
         // Тест matches
-        System.out.println("matches(READ, users): " + p.matches("READ", "users")); // true
-        System.out.println("matches(READ, null): " + p.matches("READ", null)); // true
-        System.out.println("matches(null, users): " + p.matches(null, "users")); // true
-        System.out.println("matches(WRITE, users): " + p.matches("WRITE", "users")); // false
-        System.out.println("matches(READ, reports): " + p.matches("READ", "reports")); // false
+        System.out.println("matches(READ, users): " + p.matches("READ", "users"));
+        System.out.println("matches(READ, null): " + p.matches("READ", null));
+        System.out.println("matches(null, users): " + p.matches(null, "users"));
+        System.out.println("matches(WRITE, users): " + p.matches("WRITE", "users"));
+        System.out.println("matches(READ, reports): " + p.matches("READ", "reports"));
+    }
+    
+    private static void testRole() {
+        System.out.println("\n=== Testing Role ===");
+        
+        // Создаем несколько разрешений
+        Permission readUsers = new Permission("READ", "users", "Can view users");
+        Permission writeUsers = new Permission("WRITE", "users", "Can create/edit users");
+        Permission deleteUsers = new Permission("DELETE", "users", "Can delete users");
+        Permission readReports = new Permission("READ", "reports", "Can view reports");
+        
+        // Создаем роль
+        Role adminRole = new Role("Administrator", "Full system access");
+        System.out.println("✓ Role created: " + adminRole);
+        
+        // Добавляем разрешения
+        adminRole.addPermission(readUsers);
+        adminRole.addPermission(writeUsers);
+        adminRole.addPermission(deleteUsers);
+        adminRole.addPermission(readReports);
+        System.out.println("✓ Added 4 permissions");
+        
+        // Проверяем наличие разрешений
+        System.out.println("\n=== Testing hasPermission ===");
+        System.out.println("Has READ on users: " + 
+            adminRole.hasPermission("READ", "users"));
+        System.out.println("Has WRITE on users: " + 
+            adminRole.hasPermission("WRITE", "users"));
+        System.out.println("Has DELETE on reports: " + 
+            adminRole.hasPermission("DELETE", "reports"));
+        
+        // Проверяем contains через объект Permission
+        System.out.println("\n=== Testing contains permission object ===");
+        System.out.println("Contains READ on users: " + 
+            adminRole.hasPermission(readUsers));
+        
+        // Создаем временный объект для сравнения (с валидным описанием)
+        Permission deleteReports = new Permission("DELETE", "reports", "Can delete reports");
+        System.out.println("Contains DELETE on reports: " + 
+            adminRole.hasPermission(deleteReports)); // должно быть false
+        
+        // Удаляем разрешение
+        adminRole.removePermission(readReports);
+        System.out.println("\n✓ Removed READ on reports");
+        System.out.println("Has READ on reports after removal: " + 
+            adminRole.hasPermission("READ", "reports"));
+        
+        // Проверяем неизменяемость возвращаемой коллекции
+        System.out.println("\n=== Testing unmodifiable collection ===");
+        try {
+            adminRole.getPermissions().clear();
+            System.out.println("✗ Should not be able to modify");
+        } catch (UnsupportedOperationException e) {
+            System.out.println("✓ Correctly prevents modification");
+        }
+        
+        // Тестируем форматированный вывод
+        System.out.println("\n=== Testing format() ===");
+        System.out.println(adminRole.format());
+        
+        // Тестируем equals/hashCode
+        System.out.println("=== Testing equals/hashCode ===");
+        Role anotherAdmin = new Role("Administrator", "Full system access");
+        System.out.println("Roles with same name but different IDs are equal? " + 
+            adminRole.equals(anotherAdmin)); // false, так как ID разные
+        
+        // Создаем роль с предопределенным ID (имитация загрузки из файла)
+        Role loadedRole = Role.createFromExisting(
+            adminRole.getId(), 
+            "Manager", 
+            "Manager role", 
+            adminRole.getPermissions()
+        );
+        System.out.println("Role created from existing with same ID are equal? " + 
+            adminRole.equals(loadedRole)); // true, так как ID одинаковый
     }
 }
