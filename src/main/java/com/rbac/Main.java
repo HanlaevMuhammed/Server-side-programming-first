@@ -6,6 +6,7 @@ public class Main {
         testPermission();
         testRole();
         testAssignmentMetadata();
+        testAssignments();
     }
     
     private static void testUser() {
@@ -212,5 +213,83 @@ public class Main {
         } catch (IllegalArgumentException e) {
             System.out.println("✓ Correctly failed: " + e.getMessage());
         }
+    }
+    
+    private static void testAssignments() {
+        System.out.println("\n=== Testing Assignments ===");
+        
+        // Создаем тестовые данные
+        User user = User.create("john_doe", "John Doe", "john@example.com");
+        
+        Permission readUsers = new Permission("READ", "users", "Can read users");
+        Permission writeUsers = new Permission("WRITE", "users", "Can write users");
+        
+        Role adminRole = new Role("Administrator", "Admin role");
+        adminRole.addPermission(readUsers);
+        adminRole.addPermission(writeUsers);
+        
+        Role viewerRole = new Role("Viewer", "View only");
+        viewerRole.addPermission(readUsers);
+        
+        AssignmentMetadata metadata = AssignmentMetadata.now("admin", "Test assignment");
+        
+        System.out.println("\n=== Testing PermanentAssignment ===");
+        
+        // Создаем постоянное назначение
+        PermanentAssignment permAssign = new PermanentAssignment(user, adminRole, metadata);
+        System.out.println("✓ Created: " + permAssign);
+        System.out.println("Type: " + permAssign.assignmentType());
+        System.out.println("Active: " + permAssign.isActive());
+        System.out.println("Revoked: " + permAssign.isRevoked());
+        System.out.println("\nSummary:\n" + permAssign.summary());
+        
+        // Отзываем назначение
+        permAssign.revoke();
+        System.out.println("\nAfter revoke:");
+        System.out.println("Active: " + permAssign.isActive());
+        System.out.println("Revoked: " + permAssign.isRevoked());
+        System.out.println("Summary:\n" + permAssign.summary());
+        
+        System.out.println("\n=== Testing TemporaryAssignment ===");
+        
+        // Создаем временное назначение (истекает через 7 дней)
+        String futureDate = java.time.LocalDateTime.now().plusDays(7).format(
+            java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"));
+        
+        TemporaryAssignment tempAssign = new TemporaryAssignment(
+            user, viewerRole, metadata, futureDate, false);
+        
+        System.out.println("✓ Created: " + tempAssign);
+        System.out.println("Type: " + tempAssign.assignmentType());
+        System.out.println("Expires: " + tempAssign.getExpiresAt());
+        System.out.println("Active: " + tempAssign.isActive());
+        System.out.println("Expired: " + tempAssign.isExpired());
+        System.out.println("Time remaining: " + tempAssign.getTimeRemaining());
+        System.out.println("\nSummary:\n" + tempAssign.summary());
+        
+        // Продлеваем назначение
+        String laterDate = java.time.LocalDateTime.now().plusDays(30).format(
+            java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"));
+        tempAssign.extend(laterDate);
+        System.out.println("\nAfter extension:");
+        System.out.println("Expires: " + tempAssign.getExpiresAt());
+        System.out.println("Time remaining: " + tempAssign.getTimeRemaining());
+        
+        // Тест с auto-renew
+        TemporaryAssignment autoRenewAssign = new TemporaryAssignment(
+            user, viewerRole, metadata, futureDate, true);
+        System.out.println("\nAuto-renew enabled: " + autoRenewAssign.isAutoRenew());
+        
+        // Создаем просроченное назначение для теста
+        String pastDate = java.time.LocalDateTime.now().minusDays(1).format(
+            java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"));
+        
+        TemporaryAssignment expiredAssign = new TemporaryAssignment(
+            user, viewerRole, metadata, pastDate, false);
+        System.out.println("\nExpired assignment:");
+        System.out.println("Expires: " + expiredAssign.getExpiresAt());
+        System.out.println("Expired: " + expiredAssign.isExpired());
+        System.out.println("Active: " + expiredAssign.isActive());
+        System.out.println("Time remaining: " + expiredAssign.getTimeRemaining());
     }
 }
