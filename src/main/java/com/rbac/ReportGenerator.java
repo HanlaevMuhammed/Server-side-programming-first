@@ -13,35 +13,27 @@ public class ReportGenerator {
     public String generateUsersReport() {
         List<User> users = system.getUserManager().findAll();
         if (users.isEmpty()) return "No users.";
-        StringBuilder sb = new StringBuilder("Users report:\n");
-        users.parallelStream().forEach(user -> {
-            String line = String.format("%s (%s) - roles: %d\n",
-                    user.username(),
-                    user.email(),
-                    system.getAssignmentManager().findByUser(user).size());
-            synchronized (sb) {
-                sb.append(line);
-            }
-        });
-        return sb.toString();
+        String body = users.parallelStream()
+                .map(user -> String.format("%s (%s) - roles: %d",
+                        user.username(),
+                        user.email(),
+                        system.getAssignmentManager().findByUser(user).size()))
+                .sorted()
+                .collect(Collectors.joining("\n"));
+        return "Users report:\n" + body + "\n";
     }
 
     public String generatePermissionsMatrix() {
         List<User> users = system.getUserManager().findAll();
-        Set<String> allResources = system.getAssignmentManager().findAll().stream()
-                .flatMap(a -> a.role().getPermissions().stream())
-                .map(Permission::resource)
-                .collect(Collectors.toSet());
-        StringBuilder matrix = new StringBuilder("Permissions matrix (user -> resources):\n");
-        users.parallelStream().forEach(user -> {
-            Set<String> userResources = system.getAssignmentManager().getUserPermissions(user).stream()
-                    .map(Permission::resource)
-                    .collect(Collectors.toSet());
-            String line = String.format("%s: %s\n", user.username(), userResources);
-            synchronized (matrix) {
-                matrix.append(line);
-            }
-        });
-        return matrix.toString();
+        String body = users.parallelStream()
+                .map(user -> {
+                    Set<String> userResources = system.getAssignmentManager().getUserPermissions(user).stream()
+                            .map(Permission::resource)
+                            .collect(Collectors.toCollection(TreeSet::new));
+                    return String.format("%s: %s", user.username(), userResources);
+                })
+                .sorted()
+                .collect(Collectors.joining("\n"));
+        return "Permissions matrix (user -> resources):\n" + body + "\n";
     }
 }
