@@ -87,6 +87,14 @@ class UserManagerTest {
     }
 
     @Test
+    void findByFilterParallel() {
+        userManager.add(user1);
+        userManager.add(user2);
+        List<User> result = userManager.findByFilterParallel(UserFilters.byEmailDomain("@example.com"));
+        assertEquals(2, result.size());
+    }
+
+    @Test
     void findAllWithFilterAndSorter() {
         userManager.add(user1);
         userManager.add(user2);

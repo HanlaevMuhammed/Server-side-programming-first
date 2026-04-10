@@ -129,4 +129,12 @@ class AssignmentManagerTest {
         assignmentManager.extendTemporaryAssignment(ta.assignmentId(), newDate);
         assertEquals(newDate, ta.getExpiresAt());
     }
+
+    @Test
+    void findByFilterParallel() {
+        PermanentAssignment pa = new PermanentAssignment(user, adminRole, metadata);
+        assignmentManager.add(pa);
+        List<RoleAssignment> result = assignmentManager.findByFilterParallel(RoleAssignment::isActive);
+        assertEquals(1, result.size());
+    }
 }

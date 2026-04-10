@@ -88,4 +88,13 @@ class RoleManagerTest {
         result = roleManager.findRolesWithPermission("WRITE", "users");
         assertEquals(1, result.size());
     }
+
+    @Test
+    void findByFilterParallel() {
+        roleManager.add(adminRole);
+        roleManager.add(viewerRole);
+        List<Role> result = roleManager.findByFilterParallel(RoleFilters.byNameContains("view"));
+        assertEquals(1, result.size());
+        assertEquals("Viewer", result.get(0).getName());
+    }
 }
