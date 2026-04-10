@@ -9,6 +9,7 @@ public class AssignmentManager implements Repository<RoleAssignment> {
     private final ConcurrentMap<String, RoleAssignment> assignmentsById = new ConcurrentHashMap<>();
     private final UserManager userManager;
     private final RoleManager roleManager;
+    private final Object assignmentWriteLock = new Object();
 
     public AssignmentManager(UserManager userManager, RoleManager roleManager) {
         this.userManager = userManager;
@@ -26,15 +27,17 @@ public class AssignmentManager implements Repository<RoleAssignment> {
         if (!roleManager.exists(role.getName())) {
             throw new IllegalArgumentException("Role " + role.getName() + " does not exist");
         }
-        // атомарная проверка дубликата
-        boolean alreadyAssigned = assignmentsById.values().stream()
-                .anyMatch(a -> a.user().equals(user) && a.role().equals(role) && a.isActive());
-        if (alreadyAssigned) {
-            throw new IllegalArgumentException("User already has an active assignment for role " + role.getName());
-        }
-        RoleAssignment previous = assignmentsById.putIfAbsent(assignment.assignmentId(), assignment);
-        if (previous != null) {
-            throw new IllegalArgumentException("Assignment with id " + assignment.assignmentId() + " already exists");
+        // Проверка и вставка выполняются под короткой блокировкой
+        synchronized (assignmentWriteLock) {
+            boolean alreadyAssigned = assignmentsById.values().stream()
+                    .anyMatch(a -> a.user().equals(user) && a.role().equals(role) && a.isActive());
+            if (alreadyAssigned) {
+                throw new IllegalArgumentException("User already has an active assignment for role " + role.getName());
+            }
+            RoleAssignment previous = assignmentsById.putIfAbsent(assignment.assignmentId(), assignment);
+            if (previous != null) {
+                throw new IllegalArgumentException("Assignment with id " + assignment.assignmentId() + " already exists");
+            }
         }
     }
 
@@ -148,11 +151,11 @@ public class AssignmentManager implements Repository<RoleAssignment> {
             throw new IllegalArgumentException("Only temporary assignments can be extended");
         }
     }
-}
 
-public List<RoleAssignment> findByFilterParallel(AssignmentFilter filter) {
-    Objects.requireNonNull(filter, "Filter cannot be null");
-    return assignmentsById.values().parallelStream()
-            .filter(filter::test)
-            .collect(Collectors.toList());
+    public List<RoleAssignment> findByFilterParallel(AssignmentFilter filter) {
+        Objects.requireNonNull(filter, "Filter cannot be null");
+        return assignmentsById.values().parallelStream()
+                .filter(filter::test)
+                .collect(Collectors.toList());
+    }
 }

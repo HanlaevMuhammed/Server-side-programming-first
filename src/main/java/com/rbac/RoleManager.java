@@ -84,7 +84,9 @@ public class RoleManager implements Repository<Role> {
         if (role == null) {
             throw new IllegalArgumentException("Role with name '" + roleName + "' not found");
         }
-        role.addPermission(permission);
+        synchronized (role) {
+            role.addPermission(permission);
+        }
     }
 
     public void removePermissionFromRole(String roleName, Permission permission) {
@@ -92,7 +94,9 @@ public class RoleManager implements Repository<Role> {
         if (role == null) {
             throw new IllegalArgumentException("Role with name '" + roleName + "' not found");
         }
-        role.removePermission(permission);
+        synchronized (role) {
+            role.removePermission(permission);
+        }
     }
 
     public List<Role> findRolesWithPermission(String permissionName, String resource) {
@@ -100,11 +104,11 @@ public class RoleManager implements Repository<Role> {
                 .filter(role -> role.hasPermission(permissionName, resource))
                 .collect(Collectors.toList());
     }
-}
 
-public List<Role> findByFilterParallel(RoleFilter filter) {
-    Objects.requireNonNull(filter, "Filter cannot be null");
-    return rolesById.values().parallelStream()
-            .filter(filter::test)
-            .collect(Collectors.toList());
+    public List<Role> findByFilterParallel(RoleFilter filter) {
+        Objects.requireNonNull(filter, "Filter cannot be null");
+        return rolesById.values().parallelStream()
+                .filter(filter::test)
+                .collect(Collectors.toList());
+    }
 }

@@ -82,11 +82,11 @@ public class UserManager implements Repository<User> {
             return User.create(username, newFullName, newEmail);
         });
     }
-}
 
-public List<User> findByFilterParallel(UserFilter filter) {
-    Objects.requireNonNull(filter, "Filter cannot be null");
-    return usersByUsername.values().parallelStream()
-            .filter(filter::test)
-            .collect(Collectors.toList());
+    public List<User> findByFilterParallel(UserFilter filter) {
+        Objects.requireNonNull(filter, "Filter cannot be null");
+        return usersByUsername.values().parallelStream()
+                .filter(filter::test)
+                .collect(Collectors.toList());
+    }
 }
