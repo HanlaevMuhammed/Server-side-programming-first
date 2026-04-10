@@ -10,6 +10,8 @@ public class RBACSystem {
     private String currentUser;
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+
     public RBACSystem() {
         this.userManager = new UserManager();
         this.roleManager = new RoleManager();
@@ -93,6 +95,29 @@ public class RBACSystem {
 
         // Устанавливаем текущего пользователя как admin (для дальнейших действий)
         this.currentUser = "admin";
+    }
+
+    public void startScheduledTasks() {
+        scheduler.scheduleAtFixedRate(() -> {
+            try {
+                // короткая критическая секция – только копия активных назначений
+                List<RoleAssignment> active = assignmentManager.getActiveAssignments();
+                for (RoleAssignment ra : active) {
+                    if (ra instanceof TemporaryAssignment temp && temp.isExpired()) {
+                        // помечаем неактивным – просто удаляем или отзываем
+                        if (!temp.isActive()) {
+                            assignmentManager.remove(ra);
+                            AuditLog.log("Expired temporary assignment removed: " + ra.assignmentId());
+                        }
+                    }
+                }
+                // лог статистики
+                String stats = generateStatistics();
+                AuditLog.log("Periodic stats:\n" + stats);
+            } catch (Exception e) {
+                AuditLog.log("Error in scheduled task: " + e.getMessage());
+            }
+        }, 10, 30, TimeUnit.SECONDS); // через 10 сек, затем каждые 30 сек
     }
 
     public String generateStatistics() {
