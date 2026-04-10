@@ -27,5 +27,6 @@ public class RBACConsole {
             parser.parseAndExecute(input, scanner, system);
         }
         scanner.close();
+        system.shutdown();
     }
 }

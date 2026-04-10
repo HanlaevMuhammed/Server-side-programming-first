@@ -399,14 +399,18 @@ public class CommandRegistry {
         });
 
         parser.registerCommand("save-async", "Save data to file in background", (scanner, system) -> {
+            System.out.print("Enter file path: ");
+            String filePath = scanner.nextLine().trim();
             system.getExecutor().submit(() -> {
-                // Здесь можно реализовать сериализацию данных в файл (JSON/CSV)
-                // Для примера – просто логируем
-                AuditLog.log("Saving data to file...");
-                // имитация сохранения
-                try { Thread.sleep(1000); } catch (InterruptedException e) {}
-                AuditLog.log("Data saved.");
-                System.out.println("Save completed.");
+                try {
+                    AuditLog.log("Saving data to file: " + filePath);
+                    system.saveToFile(filePath);
+                    AuditLog.log("Data saved to file: " + filePath);
+                    System.out.println("Save completed.");
+                } catch (Exception e) {
+                    AuditLog.log("Save failed: " + e.getMessage());
+                    System.out.println("Save failed: " + e.getMessage());
+                }
             });
             System.out.println("Save started in background.");
         });
@@ -537,7 +541,12 @@ public class CommandRegistry {
                 return;
             }
             for (RoleAssignment ra : assignments) {
-                System.out.println(ra.summary());
+                if (ra instanceof AbstractRoleAssignment ara) {
+                    System.out.println(ara.summary());
+                } else {
+                    System.out.printf("[%s] %s -> %s, active=%s\n",
+                            ra.assignmentType(), ra.user().username(), ra.role().getName(), ra.isActive());
+                }
                 System.out.println("---");
             }
         });
@@ -744,11 +753,25 @@ public class CommandRegistry {
         });
 
         parser.registerCommand("save", "Save data to file", (scanner, system) -> {
-            System.out.println("Save feature not implemented yet.");
+            System.out.print("Enter file path: ");
+            String filePath = scanner.nextLine().trim();
+            try {
+                system.saveToFile(filePath);
+                System.out.println("Data saved.");
+            } catch (Exception e) {
+                System.out.println("Save failed: " + e.getMessage());
+            }
         });
 
         parser.registerCommand("load", "Load data from file", (scanner, system) -> {
-            System.out.println("Load feature not implemented yet.");
+            System.out.print("Enter file path: ");
+            String filePath = scanner.nextLine().trim();
+            try {
+                system.loadFromFile(filePath);
+                System.out.println("Data loaded.");
+            } catch (Exception e) {
+                System.out.println("Load failed: " + e.getMessage());
+            }
         });
     }
 }
