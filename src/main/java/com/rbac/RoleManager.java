@@ -101,3 +101,10 @@ public class RoleManager implements Repository<Role> {
                 .collect(Collectors.toList());
     }
 }
+
+public List<Role> findByFilterParallel(RoleFilter filter) {
+    Objects.requireNonNull(filter, "Filter cannot be null");
+    return rolesById.values().parallelStream()
+            .filter(filter::test)
+            .collect(Collectors.toList());
+}
