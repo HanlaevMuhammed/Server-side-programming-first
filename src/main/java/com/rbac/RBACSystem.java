@@ -1,6 +1,10 @@
 package com.rbac;
 
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public class RBACSystem {
@@ -18,6 +22,7 @@ public class RBACSystem {
         this.assignmentManager = new AssignmentManager(userManager, roleManager);
         this.currentUser = "system";
         initialize();
+        startScheduledTasks();
     }
 
     public ExecutorService getExecutor() { return executor; }
@@ -100,24 +105,169 @@ public class RBACSystem {
     public void startScheduledTasks() {
         scheduler.scheduleAtFixedRate(() -> {
             try {
-                // короткая критическая секция – только копия активных назначений
-                List<RoleAssignment> active = assignmentManager.getActiveAssignments();
-                for (RoleAssignment ra : active) {
-                    if (ra instanceof TemporaryAssignment temp && temp.isExpired()) {
-                        // помечаем неактивным – просто удаляем или отзываем
-                        if (!temp.isActive()) {
-                            assignmentManager.remove(ra);
-                            AuditLog.log("Expired temporary assignment removed: " + ra.assignmentId());
-                        }
-                    }
+                // Проверка выполняется на копии списка без долгой блокировки.
+                List<RoleAssignment> all = assignmentManager.findAll();
+                long expiredTemporary = all.stream()
+                        .filter(a -> a instanceof TemporaryAssignment)
+                        .filter(a -> !a.isActive())
+                        .count();
+                if (expiredTemporary > 0) {
+                    AuditLog.log("Expired temporary assignments detected: " + expiredTemporary);
                 }
-                // лог статистики
                 String stats = generateStatistics();
                 AuditLog.log("Periodic stats:\n" + stats);
             } catch (Exception e) {
                 AuditLog.log("Error in scheduled task: " + e.getMessage());
             }
         }, 10, 30, TimeUnit.SECONDS); // через 10 сек, затем каждые 30 сек
+    }
+
+    public void saveToFile(String filePath) {
+        Objects.requireNonNull(filePath, "File path cannot be null");
+        List<String> lines = new ArrayList<>();
+
+        for (User user : userManager.findAll()) {
+            lines.add("USER|" + esc(user.username()) + "|" + esc(user.fullName()) + "|" + esc(user.email()));
+        }
+        for (Role role : roleManager.findAll()) {
+            lines.add("ROLE|" + esc(role.getName()) + "|" + esc(role.getDescription()));
+            for (Permission permission : role.getPermissions()) {
+                lines.add("PERMISSION|" + esc(role.getName()) + "|" + esc(permission.name()) + "|"
+                        + esc(permission.resource()) + "|" + esc(permission.description()));
+            }
+        }
+        for (RoleAssignment assignment : assignmentManager.findAll()) {
+            if (assignment instanceof PermanentAssignment p) {
+                lines.add("ASSIGNMENT|PERMANENT|" + esc(assignment.user().username()) + "|" + esc(assignment.role().getName())
+                        + "|" + esc(assignment.metadata().assignedBy()) + "|" + esc(assignment.metadata().assignedAt())
+                        + "|" + esc(nvl(assignment.metadata().reason())) + "|" + p.isRevoked());
+            } else if (assignment instanceof TemporaryAssignment t) {
+                lines.add("ASSIGNMENT|TEMPORARY|" + esc(assignment.user().username()) + "|" + esc(assignment.role().getName())
+                        + "|" + esc(assignment.metadata().assignedBy()) + "|" + esc(assignment.metadata().assignedAt())
+                        + "|" + esc(nvl(assignment.metadata().reason())) + "|" + esc(t.getExpiresAt())
+                        + "|" + t.isAutoRenew());
+            }
+        }
+
+        try {
+            java.nio.file.Files.write(java.nio.file.Path.of(filePath), lines);
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to save data: " + e.getMessage(), e);
+        }
+    }
+
+    public void loadFromFile(String filePath) {
+        Objects.requireNonNull(filePath, "File path cannot be null");
+        try {
+            List<String> lines = java.nio.file.Files.readAllLines(java.nio.file.Path.of(filePath));
+            userManager.clear();
+            roleManager.clear();
+            assignmentManager.clear();
+
+            Map<String, Role> loadedRoles = new HashMap<>();
+            List<String[]> assignmentRows = new ArrayList<>();
+
+            for (String line : lines) {
+                if (line == null || line.isBlank()) {
+                    continue;
+                }
+                String[] parts = split(line);
+                switch (parts[0]) {
+                    case "USER" -> userManager.add(User.create(unesc(parts[1]), unesc(parts[2]), unesc(parts[3])));
+                    case "ROLE" -> {
+                        Role role = new Role(unesc(parts[1]), unesc(parts[2]));
+                        roleManager.add(role);
+                        loadedRoles.put(role.getName(), role);
+                    }
+                    case "PERMISSION" -> {
+                        Role role = loadedRoles.get(unesc(parts[1]));
+                        if (role != null) {
+                            role.addPermission(new Permission(unesc(parts[2]), unesc(parts[3]), unesc(parts[4])));
+                        }
+                    }
+                    case "ASSIGNMENT" -> assignmentRows.add(parts);
+                    default -> throw new IllegalArgumentException("Unknown row type: " + parts[0]);
+                }
+            }
+
+            for (String[] parts : assignmentRows) {
+                String type = parts[1];
+                User user = userManager.findByUsername(unesc(parts[2]))
+                        .orElseThrow(() -> new IllegalArgumentException("Unknown user in assignment"));
+                Role role = roleManager.findByName(unesc(parts[3]))
+                        .orElseThrow(() -> new IllegalArgumentException("Unknown role in assignment"));
+                AssignmentMetadata metadata = new AssignmentMetadata(unesc(parts[4]), unesc(parts[5]), denull(unesc(parts[6])));
+
+                if ("PERMANENT".equals(type)) {
+                    PermanentAssignment assignment = new PermanentAssignment(user, role, metadata);
+                    if (Boolean.parseBoolean(parts[7])) {
+                        assignment.revoke();
+                    }
+                    assignmentManager.add(assignment);
+                } else if ("TEMPORARY".equals(type)) {
+                    TemporaryAssignment assignment = new TemporaryAssignment(
+                            user, role, metadata, unesc(parts[7]), Boolean.parseBoolean(parts[8]));
+                    assignmentManager.add(assignment);
+                }
+            }
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to load data: " + e.getMessage(), e);
+        }
+    }
+
+    public void shutdown() {
+        scheduler.shutdownNow();
+        executor.shutdown();
+        AuditLog.shutdown();
+    }
+
+    private static String esc(String value) {
+        return value.replace("\\", "\\\\").replace("|", "\\|");
+    }
+
+    private static String unesc(String value) {
+        StringBuilder sb = new StringBuilder();
+        boolean escaped = false;
+        for (char c : value.toCharArray()) {
+            if (escaped) {
+                sb.append(c);
+                escaped = false;
+            } else if (c == '\\') {
+                escaped = true;
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
+
+    private static String[] split(String line) {
+        List<String> parts = new ArrayList<>();
+        StringBuilder token = new StringBuilder();
+        boolean escaped = false;
+        for (char c : line.toCharArray()) {
+            if (escaped) {
+                token.append(c);
+                escaped = false;
+            } else if (c == '\\') {
+                escaped = true;
+            } else if (c == '|') {
+                parts.add(token.toString());
+                token.setLength(0);
+            } else {
+                token.append(c);
+            }
+        }
+        parts.add(token.toString());
+        return parts.toArray(new String[0]);
+    }
+
+    private static String nvl(String value) {
+        return value == null ? "" : value;
+    }
+
+    private static String denull(String value) {
+        return value == null || value.isBlank() ? null : value;
     }
 
     public String generateStatistics() {
