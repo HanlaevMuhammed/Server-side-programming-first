@@ -8,6 +8,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public class RBACSystem {
+    private static final int DEFAULT_SCHEDULER_INITIAL_DELAY_SECONDS = 10;
+    private static final int DEFAULT_SCHEDULER_PERIOD_SECONDS = 30;
     private final UserManager userManager;
     private final RoleManager roleManager;
     private final AssignmentManager assignmentManager;
@@ -103,6 +105,10 @@ public class RBACSystem {
     }
 
     public void startScheduledTasks() {
+        startScheduledTasks(DEFAULT_SCHEDULER_INITIAL_DELAY_SECONDS, DEFAULT_SCHEDULER_PERIOD_SECONDS);
+    }
+
+    public void startScheduledTasks(int initialDelaySeconds, int periodSeconds) {
         scheduler.scheduleAtFixedRate(() -> {
             try {
                 // Проверка выполняется на копии списка без долгой блокировки.
@@ -119,7 +125,7 @@ public class RBACSystem {
             } catch (Exception e) {
                 AuditLog.log("Error in scheduled task: " + e.getMessage());
             }
-        }, 10, 30, TimeUnit.SECONDS); // через 10 сек, затем каждые 30 сек
+        }, initialDelaySeconds, periodSeconds, TimeUnit.SECONDS);
     }
 
     public void saveToFile(String filePath) {
