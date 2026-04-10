@@ -8,6 +8,7 @@ public class RBACSystem {
     private final RoleManager roleManager;
     private final AssignmentManager assignmentManager;
     private String currentUser;
+    private final ExecutorService executor = Executors.newCachedThreadPool();
 
     public RBACSystem() {
         this.userManager = new UserManager();
@@ -16,6 +17,8 @@ public class RBACSystem {
         this.currentUser = "system";
         initialize();
     }
+
+    public ExecutorService getExecutor() { return executor; }
 
     public UserManager getUserManager() {
         return userManager;

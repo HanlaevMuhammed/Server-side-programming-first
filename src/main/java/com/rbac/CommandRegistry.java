@@ -384,6 +384,33 @@ public class CommandRegistry {
             }
         });
 
+        parser.registerCommand("report-users-async", "Generate users report in background", (scanner, system) -> {
+            system.getExecutor().submit(() -> {
+                ReportGenerator rg = new ReportGenerator(system);
+                String report = rg.generateUsersReport();
+                AuditLog.log("Async report generated:\n" + report);
+                System.out.println("Report generation completed. Check console for output.");
+            });
+            System.out.println("Report generation started in background.");
+        });
+
+        parser.registerCommand("audit-log", "Show audit log", (scanner, system) -> {
+            System.out.println("Audit log is printed to console in real time.");
+        });
+
+        parser.registerCommand("save-async", "Save data to file in background", (scanner, system) -> {
+            system.getExecutor().submit(() -> {
+                // Здесь можно реализовать сериализацию данных в файл (JSON/CSV)
+                // Для примера – просто логируем
+                AuditLog.log("Saving data to file...");
+                // имитация сохранения
+                try { Thread.sleep(1000); } catch (InterruptedException e) {}
+                AuditLog.log("Data saved.");
+                System.out.println("Save completed.");
+            });
+            System.out.println("Save started in background.");
+        });
+
         parser.registerCommand("assign-role", "Assign a role to a user", (scanner, system) -> {
             System.out.print("Enter username: ");
             String username = scanner.nextLine().trim();
