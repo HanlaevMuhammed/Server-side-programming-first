@@ -1,37 +1,37 @@
 package com.rbac;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
 
 public class RoleManager implements Repository<Role> {
-    private final Map<String, Role> rolesById = new HashMap<>();
-    private final Map<String, Role> rolesByName = new HashMap<>();
+    private final ConcurrentMap<String, Role> rolesById = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Role> rolesByName = new ConcurrentHashMap<>();
 
     @Override
     public void add(Role role) {
         Objects.requireNonNull(role, "Role cannot be null");
         String id = role.getId();
         String name = role.getName();
-        if (rolesById.containsKey(id)) {
-            throw new IllegalArgumentException("Role with id '" + id + "' already exists");
-        }
-        if (rolesByName.containsKey(name)) {
+        // атомарно проверяем оба условия
+        rolesById.putIfAbsent(id, role);
+        Role previousByName = rolesByName.putIfAbsent(name, role);
+        if (previousByName != null) {
+            // откатываем, если имя уже существует
+            rolesById.remove(id, role);
             throw new IllegalArgumentException("Role with name '" + name + "' already exists");
         }
-        rolesById.put(id, role);
-        rolesByName.put(name, role);
     }
 
     @Override
     public boolean remove(Role role) {
         Objects.requireNonNull(role, "Role cannot be null");
-        // Проверка на наличие назначений будет добавлена позже через AssignmentManager
-        Role removed = rolesById.remove(role.getId());
-        if (removed != null) {
-            rolesByName.remove(role.getName());
-            return true;
+        boolean removedById = rolesById.remove(role.getId(), role);
+        if (removedById) {
+            rolesByName.remove(role.getName(), role);
         }
-        return false;
+        return removedById;
     }
 
     @Override

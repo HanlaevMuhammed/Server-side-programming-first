@@ -1,19 +1,21 @@
 package com.rbac;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
 
 public class UserManager implements Repository<User> {
-    private final Map<String, User> usersByUsername = new HashMap<>();
+    private final ConcurrentMap<String, User> usersByUsername = new ConcurrentHashMap<>();
 
     @Override
     public void add(User user) {
         Objects.requireNonNull(user, "User cannot be null");
         String username = user.username();
-        if (usersByUsername.containsKey(username)) {
+        User previous = usersByUsername.putIfAbsent(username, user);
+        if (previous != null) {
             throw new IllegalArgumentException("User with username '" + username + "' already exists");
         }
-        usersByUsername.put(username, user);
     }
 
     @Override
@@ -42,7 +44,6 @@ public class UserManager implements Repository<User> {
         usersByUsername.clear();
     }
 
-    // Дополнительные методы
     public Optional<User> findByUsername(String username) {
         return Optional.ofNullable(usersByUsername.get(username));
     }
@@ -74,11 +75,11 @@ public class UserManager implements Repository<User> {
     }
 
     public void update(String username, String newFullName, String newEmail) {
-        User existing = usersByUsername.get(username);
-        if (existing == null) {
-            throw new IllegalArgumentException("User with username '" + username + "' not found");
-        }
-        User updatedUser = User.create(username, newFullName, newEmail);
-        usersByUsername.put(username, updatedUser);
+        usersByUsername.compute(username, (key, existing) -> {
+            if (existing == null) {
+                throw new IllegalArgumentException("User with username '" + username + "' not found");
+            }
+            return User.create(username, newFullName, newEmail);
+        });
     }
 }

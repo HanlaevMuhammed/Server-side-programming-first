@@ -1,10 +1,12 @@
 package com.rbac;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
 
 public class AssignmentManager implements Repository<RoleAssignment> {
-    private final Map<String, RoleAssignment> assignmentsById = new HashMap<>();
+    private final ConcurrentMap<String, RoleAssignment> assignmentsById = new ConcurrentHashMap<>();
     private final UserManager userManager;
     private final RoleManager roleManager;
 
@@ -24,18 +26,22 @@ public class AssignmentManager implements Repository<RoleAssignment> {
         if (!roleManager.exists(role.getName())) {
             throw new IllegalArgumentException("Role " + role.getName() + " does not exist");
         }
+        // атомарная проверка дубликата
         boolean alreadyAssigned = assignmentsById.values().stream()
                 .anyMatch(a -> a.user().equals(user) && a.role().equals(role) && a.isActive());
         if (alreadyAssigned) {
             throw new IllegalArgumentException("User already has an active assignment for role " + role.getName());
         }
-        assignmentsById.put(assignment.assignmentId(), assignment);
+        RoleAssignment previous = assignmentsById.putIfAbsent(assignment.assignmentId(), assignment);
+        if (previous != null) {
+            throw new IllegalArgumentException("Assignment with id " + assignment.assignmentId() + " already exists");
+        }
     }
 
     @Override
     public boolean remove(RoleAssignment assignment) {
         Objects.requireNonNull(assignment, "Assignment cannot be null");
-        return assignmentsById.remove(assignment.assignmentId()) != null;
+        return assignmentsById.remove(assignment.assignmentId(), assignment);
     }
 
     @Override
